@@ -1,5 +1,14 @@
-/* ====================================================================
- * Copyright (c) 2011 The OpenSSL Project.  All rights reserved.
+/* test/testutil.h */
+/*
+ * Utilities for writing OpenSSL unit tests.
+ *
+ * More information:
+ * http://wiki.openssl.org/index.php/How_To_Write_Unit_Tests_For_OpenSSL
+ *
+ * Author: Mike Bland (mbland@acm.org)
+ * Date:   2014-06-07
+ * ====================================================================
+ * Copyright (c) 2014 The OpenSSL Project.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,97 +56,61 @@
  * ====================================================================
  */
 
-#include <openssl/opensslconf.h>
+#ifndef HEADER_TESTUTIL_H
+#define HEADER_TESTUTIL_H
 
-#include <stdio.h>
-#include <string.h>
-#include <openssl/engine.h>
-#include <openssl/rand.h>
-#include <openssl/err.h>
+/* SETUP_TEST_FIXTURE and EXECUTE_TEST macros for test case functions.
+ *
+ * SETUP_TEST_FIXTURE will call set_up() to create a new TEST_FIXTURE_TYPE
+ * object called "fixture". It will also allocate the "result" variable used
+ * by EXECUTE_TEST. set_up() should take a const char* specifying the test
+ * case name and return a TEST_FIXTURE_TYPE by value.
+ *
+ * EXECUTE_TEST will pass fixture to execute_func() by value, call
+ * tear_down(), and return the result of execute_func(). execute_func() should
+ * take a TEST_FIXTURE_TYPE by value and return zero on success or one on
+ * failure.
+ *
+ * Unit tests can define their own SETUP_TEST_FIXTURE and EXECUTE_TEST
+ * variations like so:
+ *
+ * #define SETUP_FOOBAR_TEST_FIXTURE()\
+ *   SETUP_TEST_FIXTURE(FOOBAR_TEST_FIXTURE, set_up_foobar)
+ *
+ * #define EXECUTE_FOOBAR_TEST()\
+ *   EXECUTE_TEST(execute_foobar, tear_down_foobar)
+ *
+ * Then test case functions can take the form:
+ *
+ * static int test_foobar_feature()
+ * 	{
+ * 	SETUP_FOOBAR_TEST_FIXTURE();
+ *	[...set individual members of fixture...]
+ * 	EXECUTE_FOOBAR_TEST();
+ * 	}
+ */
+#define SETUP_TEST_FIXTURE(TEST_FIXTURE_TYPE, set_up)\
+	TEST_FIXTURE_TYPE fixture = set_up(TEST_CASE_NAME);\
+	int result = 0
 
-#if (defined(__i386)   || defined(__i386__)   || defined(_M_IX86) || \
-     defined(__x86_64) || defined(__x86_64__) || \
-     defined(_M_AMD64) || defined (_M_X64)) && defined(OPENSSL_CPUID_OBJ)
+#define EXECUTE_TEST(execute_func, tear_down)\
+	if (execute_func(fixture) != 0) result = 1;\
+	tear_down(fixture);\
+	return result
 
-size_t OPENSSL_ia32_rdrand(void);
-
-static int get_random_bytes (unsigned char *buf, int num)
-	{
-	size_t rnd;
-
-	while (num>=(int)sizeof(size_t)) {
-		if ((rnd = OPENSSL_ia32_rdrand()) == 0) return 0;
-
-		*((size_t *)buf) = rnd;
-		buf += sizeof(size_t);
-		num -= sizeof(size_t);
-	}
-	if (num) {
-		if ((rnd = OPENSSL_ia32_rdrand()) == 0) return 0;
-
-		memcpy (buf,&rnd,num);
-	}
-
-	return 1;
-	}
-
-static int random_status (void)
-{	return 1;	}
-
-static RAND_METHOD rdrand_meth =
-	{
-	NULL,	/* seed */
-	get_random_bytes,
-	NULL,	/* cleanup */
-	NULL,	/* add */
-	get_random_bytes,
-	random_status,
-	};
-
-static int rdrand_init(ENGINE *e)
-{	return 1;	}
-
-static const char *engine_e_rdrand_id = "rdrand";
-static const char *engine_e_rdrand_name = "Intel RDRAND engine";
-
-static int bind_helper(ENGINE *e)
-	{
-	if (!ENGINE_set_id(e, engine_e_rdrand_id) ||
-	    !ENGINE_set_name(e, engine_e_rdrand_name) ||
-            !ENGINE_set_flags(e, ENGINE_FLAGS_NO_REGISTER_ALL) ||
-	    !ENGINE_set_init_function(e, rdrand_init) ||
-	    !ENGINE_set_RAND(e, &rdrand_meth) )
-		return 0;
-
-	return 1;
-	}
-
-static ENGINE *ENGINE_rdrand(void)
-	{
-	ENGINE *ret = ENGINE_new();
-	if(!ret)
-		return NULL;
-	if(!bind_helper(ret))
-		{
-		ENGINE_free(ret);
-		return NULL;
-		}
-	return ret;
-	}
-
-void ENGINE_load_rdrand (void)
-	{
-	extern unsigned int OPENSSL_ia32cap_P[];
-
-	if (OPENSSL_ia32cap_P[1] & (1<<(62-32)))
-		{
-		ENGINE *toadd = ENGINE_rdrand();
-		if(!toadd) return;
-		ENGINE_add(toadd);
-		ENGINE_free(toadd);
-		ERR_clear_error();
-		}
-	}
+/* TEST_CASE_NAME is defined as the name of the test case function where
+ * possible; otherwise we get by with the file name and line number.
+ */
+#if __STDC_VERSION__ < 199901L
+#if defined(_MSC_VER)
+#define TEST_CASE_NAME __FUNCTION__
 #else
-void ENGINE_load_rdrand (void) {}
-#endif
+#define testutil_stringify_helper(s) #s
+#define testutil_stringify(s) testutil_stringify_helper(s)
+#define TEST_CASE_NAME __FILE__ ":" testutil_stringify(__LINE__)
+#endif /* _MSC_VER */
+#else
+#define TEST_CASE_NAME __func__
+#endif /* __STDC_VERSION__ */
+
+#endif /* HEADER_TESTUTIL_H */
