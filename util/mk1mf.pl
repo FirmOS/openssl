@@ -671,12 +671,6 @@ foreach (values %lib_nam)
 	$lib_obj=$lib_obj{$_};
 	local($slib)=$shlib;
 
-	if (($_ eq "SSL") && $no_ssl2 && $no_ssl3)
-		{
-		$rules.="\$(O_SSL):\n\n"; 
-		next;
-		}
-
 	$defs.=&do_defs(${_}."OBJ",$lib_obj,"\$(OBJ_D)",$obj);
 	$lib=($slib)?" \$(SHLIB_CFLAGS)".$shlib_ex_cflags{$_}:" \$(LIB_CFLAGS)";
 	$rules.=&do_compile_rule("\$(OBJ_D)",$lib_obj{$_},$lib);
@@ -1145,6 +1139,7 @@ sub read_options
 		"dll" => \$shlib,
 		"shared" => 0,
 		"no-sctp" => 0,
+		"no-srtp" => 0,
 		"no-gmp" => 0,
 		"no-rfc3779" => 0,
 		"no-montasm" => 0,
